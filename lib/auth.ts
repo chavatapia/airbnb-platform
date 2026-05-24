@@ -2,9 +2,11 @@ import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Resend from "next-auth/providers/resend";
 import { prisma } from "@/lib/prisma";
+import { authConfig } from "@/auth.config";
 import type { Role, Region } from "@prisma/client";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
     Resend({
@@ -12,20 +14,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       from: process.env.EMAIL_FROM!,
     }),
   ],
-  pages: {
-    signIn: "/login",
-    verifyRequest: "/login/verify",
-    error: "/login/error",
-  },
-  session: {
-    // JWT strategy so middleware can read session without DB access
-    // (Edge runtime doesn't support pg/Prisma)
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user }) {
       if (user?.email) {
-        // On first sign-in, load role and region from DB into JWT
         const dbUser = await prisma.user.findUnique({
           where: { email: user.email },
           select: { id: true, role: true, region: true },
@@ -49,7 +41,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 });
 
-// Type augmentation for NextAuth session
 declare module "next-auth" {
   interface Session {
     user: {
