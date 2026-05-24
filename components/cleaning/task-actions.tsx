@@ -1,0 +1,100 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import type { CleaningStatus } from "@prisma/client";
+
+interface Props {
+  taskId: string;
+  currentStatus: CleaningStatus;
+}
+
+export function CleaningTaskActions({ taskId, currentStatus }: Props) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [notes, setNotes] = useState("");
+
+  async function updateStatus(status: CleaningStatus, taskNotes?: string) {
+    setLoading(true);
+    await fetch(`/api/cleaning/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, notes: taskNotes }),
+    });
+    setLoading(false);
+    setShowNotes(false);
+    router.refresh();
+  }
+
+  if (currentStatus === "PENDING") {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button
+          size="sm"
+          onClick={() => updateStatus("IN_PROGRESS")}
+          disabled={loading}
+        >
+          Iniciar
+        </Button>
+      </div>
+    );
+  }
+
+  if (currentStatus === "IN_PROGRESS") {
+    return (
+      <div className="flex flex-col gap-2 items-end">
+        <Button
+          size="sm"
+          onClick={() => updateStatus("DONE")}
+          disabled={loading}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          Lista ✓
+        </Button>
+        {showNotes ? (
+          <div className="w-48 space-y-1">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="w-full text-xs border rounded p-1 resize-none"
+              placeholder="Describe el problema..."
+            />
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="text-xs h-7 flex-1"
+                onClick={() => updateStatus("ISSUE", notes)}
+                disabled={!notes || loading}
+              >
+                Reportar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7"
+                onClick={() => setShowNotes(false)}
+              >
+                X
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowNotes(true)}
+            className="text-xs text-red-600 border-red-200"
+          >
+            Problema
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}

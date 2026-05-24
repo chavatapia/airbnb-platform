@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Region {
+  MEXICO
+  NORWAY
+}
+
+enum Role {
+  ADMIN
+  GUEST_COORDINATOR
+  CLEANING
+  MAINTENANCE
+  FINANCE_VIEWER
+}
+
+enum Currency {
+  MXN
+  NOK
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  BLOCKED
+  PENDING_DATA
+}
+
+enum CleaningStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  ISSUE
+  CANCELLED
+}
+
+enum MaintenancePriority {
+  URGENT
+  NORMAL
+  LOW
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum ExpenseCategory {
+  CLEANING
+  MAINTENANCE
+  SUPPLIES
+  UTILITIES
+  SALARIES
+  OTHER
+}
+
+// ─── Auth (NextAuth v5) ───────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Core Models ─────────────────────────────────────────────────────────────
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  image     String?
+  role      Role      @default(GUEST_COORDINATOR)
+  region    Region?   // null = both regions (admin only)
+  createdAt DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+}
+
+model Property {
+  id           String    @id @default(cuid())
+  name         String
+  address      String
+  region       Region
+  currency     Currency
+  icalUrl      String?
+  amenities    String?   @db.Text
+  rules        String?   @db.Text
+  instructions String?   @db.Text  // wifi, access codes — used by chatbot
+  active       Boolean   @default(true)
+  lastIcalSync DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reservations       Reservation[]
+  cleaningTasks      CleaningTask[]
+  maintenanceRequests MaintenanceRequest[]
+  incomes            Income[]
+  expenses           Expense[]
+  messages           Message[]
+  syncLogs           SyncLog[]
+}
+
+model Reservation {
+  id               String            @id @default(cuid())
+  propertyId       String
+  externalId       String?           // Airbnb iCal UID
+  confirmationCode String?           // HMXXXXXXXX — for Airbnb direct link
+  guestName        String?
+  guestEmail       String?
+  checkin          DateTime
+  checkout         DateTime
+  amount           Decimal?          @db.Decimal(10, 2)
+  currency         Currency?
+  status           ReservationStatus @default(PENDING_DATA)
+  source           String            // ical | csv | manual
+  notes            String?           @db.Text
+  syncedAt         DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  property      Property       @relation(fields: [propertyId], references: [id])
+  cleaningTasks CleaningTask[]
+  incomes       Income[]
+  messages      Message[]
+
+  @@unique([propertyId, externalId])
+  @@index([checkin, checkout])
+  @@index([propertyId, status])
+}
+
+model Income {
+  id            String    @id @default(cuid())
+  propertyId    String
+  reservationId String?
+  amount        Decimal   @db.Decimal(10, 2)
+  currency      Currency
+  date          DateTime
+  description   String?
+  source        String    // csv | manual
+
+  property    Property     @relation(fields: [propertyId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  propertyId  String
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(10, 2)
+  currency    Currency
+  date        DateTime
+  description String?
+  source      String          // manual | pdf (Phase 2)
+
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId, date])
+}
+
+model CleaningTask {
+  id            String         @id @default(cuid())
+  reservationId String
+  propertyId    String
+  assignedTo    String?        // email of cleaner
+  status        CleaningStatus @default(PENDING)
+  notes         String?        @db.Text
+  scheduledFor  DateTime       // checkout date
+  completedAt   DateTime?
+  createdAt     DateTime       @default(now())
+
+  property    Property    @relation(fields: [propertyId], references: [id])
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  @@index([scheduledFor, status])
+  @@index([assignedTo, status])
+}
+
+model MaintenanceRequest {
+  id          String              @id @default(cuid())
+  propertyId  String
+  title       String
+  description String?             @db.Text
+  priority    MaintenancePriority @default(NORMAL)
+  status      MaintenanceStatus   @default(OPEN)
+  assignedTo  String?             // email of maintenance person
+  reportedBy  String?             // email of reporter
+  photoUrl    String?
+  resolvedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId, status])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  propertyId    String
+  reservationId String?
+  messageType   String   // welcome | checkin | checkout | faq | special
+  content       String   @db.Text
+  createdBy     String   // email of coordinator
+  createdAt     DateTime @default(now())
+
+  property    Property     @relation(fields: [propertyId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  type        String   // ical | gmail | csv
+  propertyId  String?
+  syncedAt    DateTime @default(now())
+  status      String   // success | error | partial
+  details     String?
+  recordCount Int      @default(0)
+
+  property Property? @relation(fields: [propertyId], references: [id])
+}
