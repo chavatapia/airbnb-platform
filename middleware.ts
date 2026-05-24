@@ -6,7 +6,15 @@ const { auth } = NextAuth(authConfig);
 export default auth;
 
 export const config = {
+  // Exclude static files, login pages, auth API, and root
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|login|api/auth).*)",
+    "/dashboard/:path*",
+    "/properties/:path*",
+    "/reservations/:path*",
+    "/messaging/:path*",
+    "/cleaning/:path*",
+    "/maintenance/:path*",
+    "/finances/:path*",
+    "/settings/:path*",
   ],
 };
