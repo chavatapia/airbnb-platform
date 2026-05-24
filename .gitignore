@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Allow .env.example but not secrets
 !.env.example
+
+.vercel
+.env*
