@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextAuthRequest } from "next-auth";
 
 // Routes accessible without login
-const PUBLIC_ROUTES = ["/login", "/login/verify", "/login/error", "/api/auth"];
+const PUBLIC_ROUTES = ["/login", "/api/auth"];
 
 // Route access per role
 const ROLE_ROUTES: Record<string, string[]> = {
@@ -14,10 +14,10 @@ const ROLE_ROUTES: Record<string, string[]> = {
   FINANCE_VIEWER: ["/dashboard", "/finances"],
 };
 
-export default auth((req: NextRequest & { auth: Awaited<ReturnType<typeof auth>> | null }) => {
+export default auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;
 
-  // Allow public routes and API routes (except /api/auth already covered)
+  // Allow public routes
   if (PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     return NextResponse.next();
   }
@@ -44,13 +44,13 @@ export default auth((req: NextRequest & { auth: Awaited<ReturnType<typeof auth>>
     return NextResponse.redirect(loginUrl);
   }
 
-  const { role } = session.user;
+  const role = session.user.role as string;
 
   // Check role access
   const allowedPaths = ROLE_ROUTES[role] ?? [];
   const hasAccess = allowedPaths.some((p) => pathname.startsWith(p));
 
-  if (!hasAccess) {
+  if (!hasAccess && pathname !== "/") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 

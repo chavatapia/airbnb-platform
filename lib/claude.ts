@@ -75,7 +75,6 @@ NO incluyas saludos genericos ni frases de relleno.`;
       {
         type: "text",
         text: systemPrompt,
-        // @ts-expect-error — cache_control is a valid Anthropic API field
         cache_control: { type: "ephemeral" },
       },
     ],

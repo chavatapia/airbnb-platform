@@ -80,16 +80,6 @@ export async function GET(req: NextRequest) {
               },
             });
 
-            // If now cancelled → cancel pending cleaning task
-            if (res.status === "CANCELLED") {
-              await prisma.cleaningTask.updateMany({
-                where: {
-                  reservationId: existing.id,
-                  status: { in: ["PENDING"] },
-                },
-                data: { status: "CANCELLED" },
-              });
-            }
             updated++;
           }
         }

@@ -22,7 +22,7 @@ export async function parseIcalUrl(
 
   for (const key in events) {
     const event = events[key];
-    if (event.type !== "VEVENT") continue;
+    if (!event || event.type !== "VEVENT") continue;
 
     const start = event.start as Date;
     const end = event.end as Date;
