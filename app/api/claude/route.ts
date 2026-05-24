@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { generateGuestMessage } from "@/lib/claude";
 import { z } from "zod";
 
+// Extend timeout to 30s for Claude API calls
+export const maxDuration = 30;
+
 const GenerateSchema = z.object({
   reservationId: z.string(),
   messageType: z.enum(["welcome", "checkin", "checkout", "faq", "special"]),
