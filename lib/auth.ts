@@ -17,22 +17,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     verifyRequest: "/login/verify",
     error: "/login/error",
   },
+  session: {
+    // JWT strategy so middleware can read session without DB access
+    // (Edge runtime doesn't support pg/Prisma)
+    strategy: "jwt",
+  },
   callbacks: {
-    async session({ session, user }) {
-      if (session.user) {
+    async jwt({ token, user }) {
+      if (user?.email) {
+        // On first sign-in, load role and region from DB into JWT
         const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { role: true, region: true },
+          where: { email: user.email },
+          select: { id: true, role: true, region: true },
         });
-        session.user.id = user.id;
-        session.user.role = dbUser?.role ?? "GUEST_COORDINATOR";
-        session.user.region = dbUser?.region ?? null;
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.role = dbUser.role;
+          token.region = dbUser.region;
+        }
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = (token.role as Role) ?? "GUEST_COORDINATOR";
+        session.user.region = (token.region as Region) ?? null;
       }
       return session;
     },
-  },
-  session: {
-    strategy: "database",
   },
 });
 
