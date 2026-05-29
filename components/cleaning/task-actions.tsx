@@ -8,20 +8,25 @@ import type { CleaningStatus } from "@prisma/client";
 interface Props {
   taskId: string;
   currentStatus: CleaningStatus;
+  assignedTo?: string | null;
+  userRole?: string;
+  userEmail?: string;
 }
 
-export function CleaningTaskActions({ taskId, currentStatus }: Props) {
+export function CleaningTaskActions({ taskId, currentStatus, assignedTo, userRole, userEmail }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [notes, setNotes] = useState("");
 
-  async function updateStatus(status: CleaningStatus, taskNotes?: string) {
+  const isAdmin = userRole === "ADMIN";
+
+  async function updateStatus(status: CleaningStatus, taskNotes?: string, completedBy?: string) {
     setLoading(true);
     await fetch(`/api/cleaning/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, notes: taskNotes }),
+      body: JSON.stringify({ status, notes: taskNotes, completedBy }),
     });
     setLoading(false);
     setShowNotes(false);
@@ -45,14 +50,36 @@ export function CleaningTaskActions({ taskId, currentStatus }: Props) {
   if (currentStatus === "IN_PROGRESS") {
     return (
       <div className="flex flex-col gap-2 items-end">
-        <Button
-          size="sm"
-          onClick={() => updateStatus("DONE")}
-          disabled={loading}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          Lista ✓
-        </Button>
+        {isAdmin ? (
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              onClick={() => updateStatus("DONE", undefined, assignedTo ?? undefined)}
+              disabled={loading}
+              className="bg-green-600 hover:bg-green-700 text-xs"
+            >
+              ✓ Juliia
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => updateStatus("DONE", undefined, userEmail)}
+              disabled={loading}
+              variant="outline"
+              className="text-xs text-green-700 border-green-300"
+            >
+              ✓ Yo
+            </Button>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            onClick={() => updateStatus("DONE", undefined, userEmail)}
+            disabled={loading}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            Lista ✓
+          </Button>
+        )}
         {showNotes ? (
           <div className="w-48 space-y-1">
             <textarea

@@ -6,6 +6,7 @@ import { z } from "zod";
 const UpdateSchema = z.object({
   status: z.enum(["PENDING", "IN_PROGRESS", "DONE", "ISSUE", "CANCELLED"]),
   notes: z.string().optional(),
+  completedBy: z.string().email().optional(),
 });
 
 export async function PATCH(
@@ -25,7 +26,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
-  const { status, notes } = parsed.data;
+  const { status, notes, completedBy } = parsed.data;
+
+  // Fetch task to know assignedTo (used as default completedBy)
+  const existing = await prisma.cleaningTask.findUnique({ where: { id } });
 
   const task = await prisma.cleaningTask.update({
     where: { id },
@@ -33,6 +37,9 @@ export async function PATCH(
       status,
       notes: notes ?? undefined,
       completedAt: status === "DONE" ? new Date() : undefined,
+      completedBy: status === "DONE"
+        ? (completedBy ?? existing?.assignedTo ?? session?.user.email ?? undefined)
+        : undefined,
     },
   });
 

@@ -37,6 +37,13 @@ export default async function CleaningPage() {
   const in7days = new Date(today);
   in7days.setDate(in7days.getDate() + 7);
 
+  // Week bounds: Sunday → Saturday
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay()); // last Sunday
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+
   const tasks = await prisma.cleaningTask.findMany({
     where: {
       status: { in: ["PENDING", "IN_PROGRESS"] },
@@ -50,6 +57,30 @@ export default async function CleaningPage() {
     },
     orderBy: { scheduledFor: "asc" },
   });
+
+  // Weekly summary (admin only)
+  const weeklyDone = isAdmin
+    ? await prisma.cleaningTask.findMany({
+        where: {
+          status: "DONE",
+          completedAt: { gte: weekStart, lte: weekEnd },
+          property: region ? { region } : {},
+        },
+        include: {
+          property: { select: { name: true } },
+          reservation: { select: { guestName: true } },
+        },
+        orderBy: { completedAt: "asc" },
+      })
+    : [];
+
+  // Group by completedBy for the summary
+  const byPerson: Record<string, typeof weeklyDone> = {};
+  for (const t of weeklyDone) {
+    const key = t.completedBy ?? "—";
+    if (!byPerson[key]) byPerson[key] = [];
+    byPerson[key].push(t);
+  }
 
   // Past issues (not resolved)
   const issues = await prisma.cleaningTask.findMany({
@@ -73,6 +104,49 @@ export default async function CleaningPage() {
           Tareas de los proximos 7 dias — {tasks.length} pendientes
         </p>
       </div>
+
+      {isAdmin && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Resumen semana{" "}
+              {weekStart.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+              {" – "}
+              {weekEnd.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+            </p>
+            {weeklyDone.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin limpiezas completadas esta semana.</p>
+            ) : (
+              <div className="space-y-3">
+                {Object.entries(byPerson).map(([person, personTasks]) => (
+                  <div key={person}>
+                    <p className="text-sm font-medium text-gray-800">
+                      {person === email ? "Yo" : person} — {personTasks.length}{" "}
+                      {personTasks.length === 1 ? "limpieza" : "limpiezas"}
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {personTasks.map((t) => (
+                        <li key={t.id} className="text-xs text-gray-500 flex gap-2">
+                          <span>•</span>
+                          <span>
+                            {t.property.name}
+                            {t.reservation.guestName ? ` · ${t.reservation.guestName}` : ""}
+                            {" · "}
+                            {new Date(t.completedAt!).toLocaleDateString("es-MX", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {tasks.length === 0 && issues.length === 0 ? (
         <Card className="border-dashed">
@@ -129,7 +203,13 @@ export default async function CleaningPage() {
                           <p className="text-xs text-gray-600 mt-1 italic">{task.notes}</p>
                         )}
                       </div>
-                      <CleaningTaskActions taskId={task.id} currentStatus={task.status} />
+                      <CleaningTaskActions
+                        taskId={task.id}
+                        currentStatus={task.status}
+                        assignedTo={task.assignedTo}
+                        userRole={session?.user.role}
+                        userEmail={email ?? undefined}
+                      />
                     </div>
                   </div>
                 );
@@ -155,7 +235,12 @@ export default async function CleaningPage() {
                           {new Date(task.scheduledFor).toLocaleDateString("es-MX")}
                         </p>
                       </div>
-                      <CleaningTaskActions taskId={task.id} currentStatus={task.status} />
+                      <CleaningTaskActions
+                        taskId={task.id}
+                        currentStatus={task.status}
+                        userRole={session?.user.role}
+                        userEmail={email ?? undefined}
+                      />
                     </div>
                   </div>
                 ))}

@@ -203,6 +203,7 @@ model CleaningTask {
   reservationId String
   propertyId    String
   assignedTo    String?        // email of cleaner
+  completedBy   String?        // email of who actually performed the cleaning
   status        CleaningStatus @default(PENDING)
   notes         String?        @db.Text
   scheduledFor  DateTime       // checkout date
