@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendInvitationEmail } from "@/lib/email";
 import { z } from "zod";
 
 const CreateUserSchema = z.object({
@@ -25,7 +26,7 @@ export async function GET() {
 }
 
 // POST /api/users — create/invite a user (admin only)
-// Creates the user record; they login via magic link on first access
+// Creates the user record and sends an invitation email with the login URL
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (session?.user.role !== "ADMIN") {
@@ -41,12 +42,22 @@ export async function POST(req: NextRequest) {
 
   const { email, name, role, region } = parsed.data;
 
+  const isNew = !(await prisma.user.findUnique({ where: { email } }));
+
   // Upsert: if user already exists from a previous login, update their role
   const user = await prisma.user.upsert({
     where: { email },
     update: { name, role, region: region ?? null },
     create: { email, name, role, region: region ?? null },
   });
+
+  // Send invitation email only for new users
+  if (isNew) {
+    const platformUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "";
+    await sendInvitationEmail({ to: email, name, platformUrl }).catch(() => {
+      // Non-fatal: user was created, email failure shouldn't block the response
+    });
+  }
 
   return NextResponse.json(user, { status: 201 });
 }

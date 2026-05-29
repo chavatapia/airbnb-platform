@@ -46,6 +46,41 @@ export async function sendCleaningTaskNotification({
   });
 }
 
+export async function sendInvitationEmail({
+  to,
+  name,
+  platformUrl,
+}: {
+  to: string;
+  name: string;
+  platformUrl: string;
+}) {
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM!,
+    to,
+    subject: "Te invitaron a la plataforma de gestión",
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #1a1a1a;">Hola, ${name} 👋</h2>
+        <p>Fuiste invitado a la plataforma de gestión de propiedades.</p>
+        <p>Para acceder, entra con tu correo electrónico (<strong>${to}</strong>) y recibirás un enlace mágico de inicio de sesión.</p>
+        <a href="${platformUrl}/login" style="
+          display: inline-block;
+          margin-top: 16px;
+          padding: 12px 24px;
+          background: #1a1a1a;
+          color: #fff;
+          text-decoration: none;
+          border-radius: 6px;
+        ">Ir a la plataforma</a>
+        <p style="margin-top: 24px; color: #666; font-size: 13px;">
+          Si no esperabas esta invitación, puedes ignorar este correo.
+        </p>
+      </div>
+    `,
+  });
+}
+
 export async function sendMaintenanceAssignmentNotification({
   to,
   propertyName,
