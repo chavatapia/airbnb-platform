@@ -96,5 +96,19 @@ export function CleaningTaskActions({ taskId, currentStatus }: Props) {
     );
   }
 
+  if (currentStatus === "ISSUE") {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => updateStatus("DONE")}
+        disabled={loading}
+        className="text-xs text-gray-600 border-gray-300"
+      >
+        {loading ? "..." : "Cerrar ✓"}
+      </Button>
+    );
+  }
+
   return null;
 }

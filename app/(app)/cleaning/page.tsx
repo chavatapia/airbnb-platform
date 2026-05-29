@@ -145,13 +145,18 @@ export default async function CleaningPage() {
               <div className="space-y-2">
                 {issues.map((task) => (
                   <div key={task.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="font-medium text-sm">{task.property.name}</p>
-                    {task.notes && (
-                      <p className="text-xs text-red-700 mt-1">{task.notes}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(task.scheduledFor).toLocaleDateString("es-MX")}
-                    </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-medium text-sm">{task.property.name}</p>
+                        {task.notes && (
+                          <p className="text-xs text-red-700 mt-1">{task.notes}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(task.scheduledFor).toLocaleDateString("es-MX")}
+                        </p>
+                      </div>
+                      <CleaningTaskActions taskId={task.id} currentStatus={task.status} />
+                    </div>
                   </div>
                 ))}
               </div>

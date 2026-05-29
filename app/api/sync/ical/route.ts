@@ -50,17 +50,7 @@ export async function GET(req: NextRequest) {
           });
           created++;
 
-          // Auto-create cleaning task if checkout is within 48h from now
-          const hoursUntilCheckout =
-            (res.checkout.getTime() - Date.now()) / (1000 * 60 * 60);
-
-          if (
-            res.status === "CONFIRMED" &&
-            hoursUntilCheckout > 0 &&
-            hoursUntilCheckout <= 48
-          ) {
-            await createCleaningTask(property.id, res.checkout);
-          }
+          // Cleaning task creation handled in the batch pass below
         } else {
           // Update if dates changed (e.g. modification)
           if (
@@ -96,6 +86,20 @@ export async function GET(req: NextRequest) {
         },
         data: { status: "CANCELLED" },
       });
+
+      // Ensure cleaning tasks exist for all confirmed checkouts in next 7 days.
+      // Covers both newly-created and already-existing reservations.
+      const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const upcomingCheckouts = await prisma.reservation.findMany({
+        where: {
+          propertyId: property.id,
+          status: "CONFIRMED",
+          checkout: { gte: new Date(), lte: sevenDaysFromNow },
+        },
+      });
+      for (const upcomingRes of upcomingCheckouts) {
+        await createCleaningTask(property.id, upcomingRes.checkout);
+      }
 
       await prisma.property.update({
         where: { id: property.id },
