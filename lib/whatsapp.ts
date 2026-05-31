@@ -29,6 +29,76 @@ export async function sendWhatsAppToGroup(
   });
 }
 
+const REGION_PHONES: Record<string, string[]> = {
+  MEXICO: [
+    process.env.WHATSAPP_PHONE_ME!,
+    process.env.WHATSAPP_PHONE_PEPE!,
+  ].filter(Boolean),
+  NORWAY: [
+    process.env.WHATSAPP_PHONE_ME!,
+    process.env.WHATSAPP_PHONE_KRISTIN!,
+  ].filter(Boolean),
+};
+
+export async function sendWhatsAppToPersons(
+  region: "MEXICO" | "NORWAY",
+  message: string
+) {
+  const phones = REGION_PHONES[region] ?? [];
+  await Promise.all(
+    phones.map((phone) =>
+      client.messages.create({
+        from: FROM,
+        to: `whatsapp:${phone}`,
+        body: message,
+      })
+    )
+  );
+}
+
+export function buildGuestReplyMessage({
+  propertyName,
+  guestName,
+  checkin,
+  checkout,
+  guestMessage,
+  aiReply,
+  airbnbLink,
+  region,
+}: {
+  propertyName: string;
+  guestName: string | null;
+  checkin: Date;
+  checkout: Date;
+  guestMessage: string;
+  aiReply: string;
+  airbnbLink: string | null;
+  region: "MEXICO" | "NORWAY";
+}): string {
+  const locale = region === "MEXICO" ? "es-MX" : "nb-NO";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+
+  const lines = [
+    `💬 *Mensaje de huesped — ${propertyName}*`,
+    guestName
+      ? `👤 ${guestName} · ${fmt(checkin)} → ${fmt(checkout)}`
+      : `📅 ${fmt(checkin)} → ${fmt(checkout)}`,
+    "",
+    `📩 *Pregunta:*`,
+    `"${guestMessage}"`,
+    "",
+    `🤖 *Respuesta sugerida:*`,
+    `"${aiReply}"`,
+  ];
+
+  if (airbnbLink) {
+    lines.push("", `🔗 Responder: ${airbnbLink}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function buildNewReservationMessage({
   propertyName,
   guestName,

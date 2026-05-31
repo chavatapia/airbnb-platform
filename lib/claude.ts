@@ -17,6 +17,7 @@ interface GenerateMessageParams {
   checkinDate?: Date | null;
   checkoutDate?: Date | null;
   customPrompt?: string;
+  guestMessage?: string;
 }
 
 const MESSAGE_TEMPLATES: Record<MessageType, string> = {
@@ -38,6 +39,7 @@ export async function generateGuestMessage({
   checkinDate,
   checkoutDate,
   customPrompt,
+  guestMessage,
 }: GenerateMessageParams): Promise<string> {
   const language = region === "MEXICO" ? "espanol" : "ingles";
 
@@ -63,8 +65,12 @@ NO incluyas saludos genericos ni frases de relleno.`;
     .filter(Boolean)
     .join("\n");
 
-  const userPrompt = customPrompt
-    ? `${customPrompt}\n\nContexto de la propiedad:\n${propertyContext}`
+  const effectivePrompt = guestMessage
+    ? `El huesped envio este mensaje: "${guestMessage}"\n\nGenera una respuesta precisa y util usando la informacion de la propiedad.`
+    : customPrompt;
+
+  const userPrompt = effectivePrompt
+    ? `${effectivePrompt}\n\nContexto de la propiedad:\n${propertyContext}`
     : `Genera un ${MESSAGE_TEMPLATES[messageType]}.\n\nContexto de la propiedad:\n${propertyContext}`;
 
   // Use prompt caching for the system prompt + property instructions (stable content)

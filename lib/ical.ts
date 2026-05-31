@@ -12,7 +12,7 @@ export interface ParsedReservation {
 }
 
 // Airbnb confirmation code pattern: HMXXXXXXXX or similar
-const CONFIRMATION_CODE_REGEX = /\b(HM[A-Z0-9]{6,10})\b/i;
+export const CONFIRMATION_CODE_REGEX = /\b(HM[A-Z0-9]{6,10})\b/i;
 
 export async function parseIcalUrl(
   icalUrl: string
