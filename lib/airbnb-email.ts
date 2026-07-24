@@ -8,12 +8,14 @@ export interface ParsedAirbnbEmail {
 
 export function parseAirbnbEmail(
   subject: string,
-  text: string
+  text: string,
+  html?: string
 ): ParsedAirbnbEmail {
-  // Extract confirmation code from subject or body
+  // Extract confirmation code from subject, text, or HTML (HTML often has it in URLs)
   const codeMatch =
     subject.match(CONFIRMATION_CODE_REGEX) ||
-    text.match(CONFIRMATION_CODE_REGEX);
+    text.match(CONFIRMATION_CODE_REGEX) ||
+    (html ? html.match(CONFIRMATION_CODE_REGEX) : null);
   const confirmationCode = codeMatch ? codeMatch[1].toUpperCase() : null;
 
   // Extract guest name from subject patterns:

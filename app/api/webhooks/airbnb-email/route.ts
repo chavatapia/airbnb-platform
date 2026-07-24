@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const from = formData.get("from")?.toString() ?? "";
     const subject = formData.get("subject")?.toString() ?? "";
     const text = formData.get("text")?.toString() ?? "";
+    const html = formData.get("html")?.toString() ?? "";
 
     // Only process emails from Airbnb
     if (!from.includes("@airbnb.com")) {
@@ -24,14 +25,15 @@ export async function POST(req: NextRequest) {
 
     const { guestName, guestMessage, confirmationCode } = parseAirbnbEmail(
       subject,
-      text
+      text,
+      html
     );
 
     if (!guestMessage) {
       return NextResponse.json({ ok: true, skipped: "no message extracted" });
     }
 
-    // Find matching reservation — by confirmation code first, then guest name
+    // Find matching reservation — by confirmation code first (iCal stores "Reserved" as guestName)
     let reservation = confirmationCode
       ? await prisma.reservation.findFirst({
           where: { confirmationCode },
@@ -39,17 +41,9 @@ export async function POST(req: NextRequest) {
         })
       : null;
 
+    // Fallback: search by guest name (only works if guestName was manually set)
     if (!reservation && guestName) {
       const firstName = guestName.split(" ")[0];
-      console.log("[airbnb-email webhook] searching by firstName:", firstName);
-
-      // DEBUG: dump all confirmed future reservations to see what guestName is stored
-      const allConfirmed = await prisma.reservation.findMany({
-        where: { status: "CONFIRMED", checkout: { gte: new Date() } },
-        select: { guestName: true, checkin: true, checkout: true, confirmationCode: true },
-      });
-      console.log("[airbnb-email webhook] all confirmed reservations:", JSON.stringify(allConfirmed));
-
       reservation = await prisma.reservation.findFirst({
         where: {
           guestName: { contains: firstName, mode: "insensitive" },
@@ -59,7 +53,6 @@ export async function POST(req: NextRequest) {
         include: { property: true },
         orderBy: { checkin: "asc" },
       });
-      console.log("[airbnb-email webhook] reservation found:", reservation?.guestName ?? "none");
     }
 
     if (!reservation) {
@@ -68,6 +61,15 @@ export async function POST(req: NextRequest) {
         guestName,
       });
       return NextResponse.json({ ok: true, skipped: "no reservation found" });
+    }
+
+    // Update guestName in DB if iCal stored "Reserved" and we now know the real name
+    if (guestName && reservation.guestName === "Reserved") {
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { guestName },
+      });
+      reservation = { ...reservation, guestName };
     }
 
     const { property } = reservation;
