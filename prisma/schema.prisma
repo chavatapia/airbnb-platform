@@ -123,11 +123,12 @@ model Property {
   address      String
   region       Region
   currency     Currency
-  icalUrl      String?
-  amenities    String?   @db.Text
-  rules        String?   @db.Text
-  instructions String?   @db.Text  // wifi, access codes — used by chatbot
-  active       Boolean   @default(true)
+  icalUrl           String?
+  whatsappGroupId   String?
+  amenities         String?   @db.Text
+  rules             String?   @db.Text
+  instructions      String?   @db.Text  // wifi, access codes — used by chatbot
+  active            Boolean   @default(true)
   lastIcalSync DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

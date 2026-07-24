@@ -9,6 +9,7 @@ const PropertySchema = z.object({
   region: z.enum(["MEXICO", "NORWAY"]),
   currency: z.enum(["MXN", "NOK"]),
   icalUrl: z.string().url().optional().or(z.literal("")),
+  whatsappGroupId: z.string().optional().or(z.literal("")),
   instructions: z.string().optional(),
   amenities: z.string().optional(),
   rules: z.string().optional(),
@@ -30,12 +31,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { icalUrl, ...rest } = parsed.data;
+  const { icalUrl, whatsappGroupId, ...rest } = parsed.data;
 
   const property = await prisma.property.create({
     data: {
       ...rest,
       icalUrl: icalUrl || null,
+      whatsappGroupId: whatsappGroupId || null,
     },
   });
 

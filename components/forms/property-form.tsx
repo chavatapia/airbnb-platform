@@ -7,7 +7,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
-export function PropertyForm({ propertyId }: { propertyId?: string }) {
+type PropertyDefaults = {
+  name?: string;
+  address?: string;
+  region?: string;
+  currency?: string;
+  icalUrl?: string;
+  whatsappGroupId?: string;
+  instructions?: string;
+  amenities?: string;
+  rules?: string;
+};
+
+export function PropertyForm({
+  propertyId,
+  defaults,
+}: {
+  propertyId?: string;
+  defaults?: PropertyDefaults;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +64,12 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="name">Nombre de la propiedad *</Label>
-              <Input id="name" name="name" placeholder="Ej: Depto Centro Guadalajara" required />
+              <Input id="name" name="name" placeholder="Ej: Depto Centro Guadalajara" required defaultValue={defaults?.name} />
             </div>
 
             <div className="col-span-2 space-y-2">
               <Label htmlFor="address">Direccion *</Label>
-              <Input id="address" name="address" placeholder="Calle, colonia, ciudad" required />
+              <Input id="address" name="address" placeholder="Calle, colonia, ciudad" required defaultValue={defaults?.address} />
             </div>
 
             <div className="space-y-2">
@@ -60,6 +78,7 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
                 id="region"
                 name="region"
                 required
+                defaultValue={defaults?.region ?? ""}
                 className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
               >
                 <option value="">Seleccionar...</option>
@@ -74,6 +93,7 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
                 id="currency"
                 name="currency"
                 required
+                defaultValue={defaults?.currency ?? ""}
                 className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background"
               >
                 <option value="">Seleccionar...</option>
@@ -96,9 +116,30 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
                 name="icalUrl"
                 type="url"
                 placeholder="https://www.airbnb.com/calendar/ical/..."
+                defaultValue={defaults?.icalUrl}
               />
               <p className="text-xs text-muted-foreground">
                 En Airbnb: Calendario → Disponibilidad → Exportar calendario → Copiar enlace
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div>
+            <h3 className="font-medium text-sm mb-3">💬 Grupo de WhatsApp</h3>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappGroupId">ID del grupo de WhatsApp</Label>
+              <Input
+                id="whatsappGroupId"
+                name="whatsappGroupId"
+                placeholder="+521234567890-1234567890@g.us"
+                defaultValue={defaults?.whatsappGroupId}
+              />
+              <p className="text-xs text-muted-foreground">
+                Crea un grupo, agrega el numero de Twilio, alguien manda un mensaje — el ID aparece en Vercel Logs como el campo &quot;From&quot;.
               </p>
             </div>
           </div>
@@ -116,6 +157,7 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
               rows={3}
               className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background resize-none"
               placeholder="Ej: Clave del portero: 1234. WiFi: RedCasaNombre / Clave123. La llave esta en la caja gris junto a la puerta..."
+              defaultValue={defaults?.instructions}
             />
           </div>
           <div className="space-y-2">
@@ -126,6 +168,7 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
               rows={2}
               className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background resize-none"
               placeholder="Ej: WiFi, estacionamiento, cocina equipada, aire acondicionado..."
+              defaultValue={defaults?.amenities}
             />
           </div>
           <div className="space-y-2">
@@ -136,6 +179,7 @@ export function PropertyForm({ propertyId }: { propertyId?: string }) {
               rows={2}
               className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background resize-none"
               placeholder="Ej: No fumar, no mascotas, check-in a partir de las 3pm..."
+              defaultValue={defaults?.rules}
             />
           </div>
         </CardContent>

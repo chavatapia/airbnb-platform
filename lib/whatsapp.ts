@@ -56,6 +56,21 @@ export async function sendWhatsAppToPersons(
   );
 }
 
+export async function sendWhatsAppForProperty(
+  property: { region: "MEXICO" | "NORWAY"; whatsappGroupId: string | null },
+  message: string
+) {
+  if (property.whatsappGroupId) {
+    await client.messages.create({
+      from: FROM,
+      to: `whatsapp:${property.whatsappGroupId}`,
+      body: message,
+    });
+  } else {
+    await sendWhatsAppToPersons(property.region, message);
+  }
+}
+
 export function buildGuestReplyMessage({
   propertyName,
   guestName,

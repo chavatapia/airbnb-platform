@@ -5,7 +5,7 @@ import { generateGuestMessage } from "@/lib/claude";
 import { buildAirbnbReservationLink } from "@/lib/ical";
 import {
   buildGuestReplyMessage,
-  sendWhatsAppToPersons,
+  sendWhatsAppForProperty,
 } from "@/lib/whatsapp";
 
 // SendGrid Inbound Parse sends multipart/form-data
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       region: property.region,
     });
 
-    await sendWhatsAppToPersons(property.region, whatsappMessage);
+    await sendWhatsAppForProperty(property, whatsappMessage);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
