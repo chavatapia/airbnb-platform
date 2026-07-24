@@ -42,6 +42,14 @@ export async function POST(req: NextRequest) {
     if (!reservation && guestName) {
       const firstName = guestName.split(" ")[0];
       console.log("[airbnb-email webhook] searching by firstName:", firstName);
+
+      // DEBUG: dump all confirmed future reservations to see what guestName is stored
+      const allConfirmed = await prisma.reservation.findMany({
+        where: { status: "CONFIRMED", checkout: { gte: new Date() } },
+        select: { guestName: true, checkin: true, checkout: true, confirmationCode: true },
+      });
+      console.log("[airbnb-email webhook] all confirmed reservations:", JSON.stringify(allConfirmed));
+
       reservation = await prisma.reservation.findFirst({
         where: {
           guestName: { contains: firstName, mode: "insensitive" },
