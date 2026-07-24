@@ -17,9 +17,6 @@ export async function POST(req: NextRequest) {
     const subject = formData.get("subject")?.toString() ?? "";
     const text = formData.get("text")?.toString() ?? "";
 
-    // Temporary: log all incoming emails for debugging
-    console.log("[airbnb-email webhook] incoming:", { from, subject, text: text.slice(0, 500) });
-
     // Only process emails from Airbnb
     if (!from.includes("@airbnb.com")) {
       return NextResponse.json({ ok: true, skipped: "not airbnb" });
