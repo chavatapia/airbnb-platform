@@ -40,9 +40,10 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (!reservation && guestName) {
+      const firstName = guestName.split(" ")[0];
       reservation = await prisma.reservation.findFirst({
         where: {
-          guestName: { contains: guestName, mode: "insensitive" },
+          guestName: { contains: firstName, mode: "insensitive" },
           status: "CONFIRMED",
           checkout: { gte: new Date() },
         },
