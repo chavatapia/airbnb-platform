@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
 
     if (!reservation && guestName) {
       const firstName = guestName.split(" ")[0];
+      console.log("[airbnb-email webhook] searching by firstName:", firstName);
       reservation = await prisma.reservation.findFirst({
         where: {
           guestName: { contains: firstName, mode: "insensitive" },
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
         include: { property: true },
         orderBy: { checkin: "asc" },
       });
+      console.log("[airbnb-email webhook] reservation found:", reservation?.guestName ?? "none");
     }
 
     if (!reservation) {
