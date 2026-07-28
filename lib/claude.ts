@@ -4,6 +4,82 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+interface HostReplyParams {
+  question: string;
+  properties: Array<{
+    name: string;
+    region: string;
+    instructions?: string | null;
+    amenities?: string | null;
+    rules?: string | null;
+  }>;
+  reservations: Array<{
+    guestName: string | null;
+    checkin: Date;
+    checkout: Date;
+    confirmationCode: string | null;
+    property: { name: string };
+  }>;
+  now: Date;
+}
+
+export async function generateHostReply({
+  question,
+  properties,
+  reservations,
+  now,
+}: HostReplyParams): Promise<string> {
+  const dateStr = now.toLocaleDateString("es-MX", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const reservationContext = reservations
+    .map((r) => {
+      const checkin = r.checkin.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+      const checkout = r.checkout.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+      const estado =
+        r.checkin <= now && r.checkout >= now
+          ? "ACTIVA"
+          : r.checkin > now
+          ? "PROXIMA"
+          : "PASADA";
+      return `- ${r.property.name}: ${r.guestName ?? "Reserved"} | ${checkin} → ${checkout} [${estado}]${r.confirmationCode ? ` | ${r.confirmationCode}` : ""}`;
+    })
+    .join("\n");
+
+  const propertyContext = properties
+    .map((p) => {
+      const parts = [`${p.name} (${p.region})`];
+      if (p.instructions) parts.push(`Acceso: ${p.instructions}`);
+      if (p.amenities) parts.push(`Amenidades: ${p.amenities}`);
+      if (p.rules) parts.push(`Reglas: ${p.rules}`);
+      return parts.join(" | ");
+    })
+    .join("\n");
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 512,
+    system: `Eres el asistente personal de un anfitrion de Airbnb con propiedades en Mexico y Noruega.
+Respondes preguntas sobre sus reservas, propiedades y huespedes de forma concisa y util.
+Hoy es ${dateStr}.
+Responde en espanol, de forma corta y directa (maximo 3-4 lineas). Sin saludos ni despedidas.`,
+    messages: [
+      {
+        role: "user",
+        content: `Propiedades:\n${propertyContext || "Sin propiedades registradas"}\n\nReservas:\n${reservationContext || "Sin reservas"}\n\nPregunta: ${question}`,
+      },
+    ],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response type from Claude");
+  return content.text;
+}
+
 export type MessageType = "welcome" | "checkin" | "checkout" | "faq" | "special";
 
 interface GenerateMessageParams {
