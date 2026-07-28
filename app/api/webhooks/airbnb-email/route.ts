@@ -5,7 +5,9 @@ import { generateGuestMessage } from "@/lib/claude";
 import { buildAirbnbReservationLink } from "@/lib/ical";
 import {
   buildGuestReplyMessage,
+  buildInquiryMessage,
   sendWhatsAppForProperty,
+  sendWhatsAppToMe,
 } from "@/lib/whatsapp";
 
 // SendGrid Inbound Parse sends multipart/form-data
@@ -56,11 +58,47 @@ export async function POST(req: NextRequest) {
     }
 
     if (!reservation) {
-      console.warn("[airbnb-email webhook] No reservation found", {
+      // Pre-booking inquiry or message without a reservation — handle it anyway
+      console.log("[airbnb-email webhook] No reservation found — treating as inquiry", {
         confirmationCode,
         guestName,
       });
-      return NextResponse.json({ ok: true, skipped: "no reservation found" });
+
+      // Try to identify which property the guest is asking about
+      const allProperties = await prisma.property.findMany({ where: { active: true } });
+      const lowerSubject = subject.toLowerCase();
+      const lowerText = text.toLowerCase();
+      const matchedProperty = allProperties.find(
+        (p) =>
+          lowerSubject.includes(p.name.toLowerCase()) ||
+          lowerText.includes(p.name.toLowerCase())
+      ) ?? null;
+
+      const aiReply = await generateGuestMessage({
+        messageType: "special",
+        guestMessage,
+        propertyName: matchedProperty?.name ?? "Wayak Properties",
+        propertyInstructions: matchedProperty?.instructions,
+        propertyAmenities: matchedProperty?.amenities,
+        propertyRules: matchedProperty?.rules,
+        region: matchedProperty?.region ?? "MEXICO",
+        guestName,
+      });
+
+      const whatsappMsg = buildInquiryMessage({
+        propertyName: matchedProperty?.name ?? null,
+        guestName,
+        guestMessage,
+        aiReply,
+      });
+
+      if (matchedProperty) {
+        await sendWhatsAppForProperty(matchedProperty, whatsappMsg);
+      } else {
+        await sendWhatsAppToMe(whatsappMsg);
+      }
+
+      return NextResponse.json({ ok: true, inquiry: true });
     }
 
     // Update guestName in DB if iCal stored "Reserved" and we now know the real name

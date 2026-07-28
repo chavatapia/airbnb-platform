@@ -71,6 +71,43 @@ export async function sendWhatsAppForProperty(
   }
 }
 
+export async function sendWhatsAppToMe(message: string) {
+  const me = process.env.WHATSAPP_PHONE_ME;
+  if (!me) {
+    console.warn("WHATSAPP_PHONE_ME not configured");
+    return;
+  }
+  await client.messages.create({
+    from: FROM,
+    to: `whatsapp:${me}`,
+    body: message,
+  });
+}
+
+export function buildInquiryMessage({
+  propertyName,
+  guestName,
+  guestMessage,
+  aiReply,
+}: {
+  propertyName: string | null;
+  guestName: string | null;
+  guestMessage: string;
+  aiReply: string;
+}): string {
+  const lines = [
+    `❓ *Consulta de Airbnb${propertyName ? ` — ${propertyName}` : ""}*`,
+    guestName ? `👤 ${guestName}` : "👤 Huesped desconocido",
+    "",
+    `📩 *Pregunta:*`,
+    `"${guestMessage}"`,
+    "",
+    `🤖 *Respuesta sugerida:*`,
+    `"${aiReply}"`,
+  ];
+  return lines.join("\n");
+}
+
 export function buildGuestReplyMessage({
   propertyName,
   guestName,
