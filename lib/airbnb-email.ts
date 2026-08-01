@@ -32,6 +32,13 @@ export function parseAirbnbEmail(
   if (nameFromSent) guestName = nameFromSent[1].trim();
   else if (nameFromNew) guestName = nameFromNew[1].trim();
 
+  // If subject is "RE: Reservation for [property], [dates]", try to extract
+  // guest name from the email body (digest format has "NAME\n\nBooker\n\n...")
+  if (!guestName) {
+    const nameFromBody = text.match(/^\s*([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñA-ZÁÉÍÓÚÜÑ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñA-ZÁÉÍÓÚÜÑ]+)?)\s*\n\s*Booker/m);
+    if (nameFromBody) guestName = nameFromBody[1].trim();
+  }
+
   const guestMessage = extractMessageBody(text);
 
   return { guestName, guestMessage, confirmationCode, threadUrl };
