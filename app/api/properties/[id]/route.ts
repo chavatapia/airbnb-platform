@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const UpdateSchema = z.object({
   name: z.string().min(1).optional(),
+  shortName: z.string().optional().or(z.literal("")),
   address: z.string().min(1).optional(),
   icalUrl: z.string().url().optional().or(z.literal("")),
   whatsappGroupId: z.string().optional().or(z.literal("")),
@@ -31,7 +32,7 @@ export async function PUT(
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
-  const { icalUrl, whatsappGroupId, ...rest } = parsed.data;
+  const { icalUrl, whatsappGroupId, shortName, ...rest } = parsed.data;
 
   const property = await prisma.property.update({
     where: { id },
@@ -39,6 +40,7 @@ export async function PUT(
       ...rest,
       ...(icalUrl !== undefined ? { icalUrl: icalUrl || null } : {}),
       ...(whatsappGroupId !== undefined ? { whatsappGroupId: whatsappGroupId || null } : {}),
+      ...(shortName !== undefined ? { shortName: shortName || null } : {}),
     },
   });
 

@@ -84,68 +84,33 @@ export async function sendWhatsAppToMe(message: string) {
   });
 }
 
-export function buildInquiryMessage({
-  propertyName,
+export function buildGuestMessage({
+  propertyShortName,
   guestName,
   guestMessage,
   aiReply,
+  threadUrl,
 }: {
-  propertyName: string | null;
+  propertyShortName: string;
   guestName: string | null;
   guestMessage: string;
   aiReply: string;
+  threadUrl: string | null;
 }): string {
-  const lines = [
-    `❓ *Consulta de Airbnb${propertyName ? ` — ${propertyName}` : ""}*`,
-    guestName ? `👤 ${guestName}` : "👤 Huesped desconocido",
-    "",
-    `📩 *Pregunta:*`,
-    `"${guestMessage}"`,
-    "",
-    `🤖 *Respuesta sugerida:*`,
-    `"${aiReply}"`,
-  ];
-  return lines.join("\n");
-}
-
-export function buildGuestReplyMessage({
-  propertyName,
-  guestName,
-  checkin,
-  checkout,
-  guestMessage,
-  aiReply,
-  airbnbLink,
-  region,
-}: {
-  propertyName: string;
-  guestName: string | null;
-  checkin: Date;
-  checkout: Date;
-  guestMessage: string;
-  aiReply: string;
-  airbnbLink: string | null;
-  region: "MEXICO" | "NORWAY";
-}): string {
-  const locale = region === "MEXICO" ? "es-MX" : "nb-NO";
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  const header = guestName
+    ? `*${propertyShortName}* · ${guestName}`
+    : `*${propertyShortName}*`;
 
   const lines = [
-    `💬 *Mensaje de huesped — ${propertyName}*`,
-    guestName
-      ? `👤 ${guestName} · ${fmt(checkin)} → ${fmt(checkout)}`
-      : `📅 ${fmt(checkin)} → ${fmt(checkout)}`,
+    header,
     "",
-    `📩 *Pregunta:*`,
-    `"${guestMessage}"`,
+    `💬 "${guestMessage}"`,
     "",
-    `🤖 *Respuesta sugerida:*`,
-    `"${aiReply}"`,
+    `🤖 ${aiReply}`,
   ];
 
-  if (airbnbLink) {
-    lines.push("", `🔗 Responder: ${airbnbLink}`);
+  if (threadUrl) {
+    lines.push("", `🔗 ${threadUrl}`);
   }
 
   return lines.join("\n");

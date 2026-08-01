@@ -120,6 +120,7 @@ model User {
 model Property {
   id           String    @id @default(cuid())
   name         String
+  shortName    String?   // short label for notifications, e.g. "IND1", "Full House"
   address      String
   region       Region
   currency     Currency

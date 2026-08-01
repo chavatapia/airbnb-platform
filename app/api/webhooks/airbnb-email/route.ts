@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseAirbnbEmail } from "@/lib/airbnb-email";
 import { generateGuestMessage } from "@/lib/claude";
-import { buildAirbnbReservationLink } from "@/lib/ical";
 import {
-  buildGuestReplyMessage,
-  buildInquiryMessage,
+  buildGuestMessage,
   sendWhatsAppForProperty,
   sendWhatsAppToMe,
 } from "@/lib/whatsapp";
@@ -20,22 +18,18 @@ export async function POST(req: NextRequest) {
     const text = formData.get("text")?.toString() ?? "";
     const html = formData.get("html")?.toString() ?? "";
 
-    // Only process emails from Airbnb
     if (!from.includes("@airbnb.com")) {
       return NextResponse.json({ ok: true, skipped: "not airbnb" });
     }
 
-    const { guestName, guestMessage, confirmationCode } = parseAirbnbEmail(
-      subject,
-      text,
-      html
-    );
+    const { guestName, guestMessage, confirmationCode, threadUrl } =
+      parseAirbnbEmail(subject, text, html);
 
     if (!guestMessage) {
       return NextResponse.json({ ok: true, skipped: "no message extracted" });
     }
 
-    // Find matching reservation — by confirmation code first (iCal stores "Reserved" as guestName)
+    // Find reservation by confirmation code first
     let reservation = confirmationCode
       ? await prisma.reservation.findFirst({
           where: { confirmationCode },
@@ -43,7 +37,7 @@ export async function POST(req: NextRequest) {
         })
       : null;
 
-    // Fallback: search by guest name (only works if guestName was manually set)
+    // Fallback: search by guest name
     if (!reservation && guestName) {
       const firstName = guestName.split(" ")[0];
       reservation = await prisma.reservation.findFirst({
@@ -58,21 +52,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (!reservation) {
-      // Pre-booking inquiry or message without a reservation — handle it anyway
-      console.log("[airbnb-email webhook] No reservation found — treating as inquiry", {
+      // Pre-booking inquiry — no reservation yet
+      console.log("[airbnb-email webhook] No reservation — treating as inquiry", {
         confirmationCode,
         guestName,
       });
 
-      // Try to identify which property the guest is asking about
       const allProperties = await prisma.property.findMany({ where: { active: true } });
       const lowerSubject = subject.toLowerCase();
       const lowerText = text.toLowerCase();
-      const matchedProperty = allProperties.find(
-        (p) =>
-          lowerSubject.includes(p.name.toLowerCase()) ||
-          lowerText.includes(p.name.toLowerCase())
-      ) ?? null;
+      const matchedProperty =
+        allProperties.find(
+          (p) =>
+            lowerSubject.includes(p.name.toLowerCase()) ||
+            lowerText.includes(p.name.toLowerCase())
+        ) ?? null;
 
       const aiReply = await generateGuestMessage({
         messageType: "special",
@@ -85,11 +79,15 @@ export async function POST(req: NextRequest) {
         guestName,
       });
 
-      const whatsappMsg = buildInquiryMessage({
-        propertyName: matchedProperty?.name ?? null,
+      const shortName =
+        matchedProperty?.shortName ?? matchedProperty?.name ?? "Airbnb";
+
+      const whatsappMsg = buildGuestMessage({
+        propertyShortName: shortName,
         guestName,
         guestMessage,
         aiReply,
+        threadUrl,
       });
 
       if (matchedProperty) {
@@ -101,7 +99,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, inquiry: true });
     }
 
-    // Update guestName in DB if iCal stored "Reserved" and we now know the real name
+    // Update guestName if iCal stored "Reserved"
     if (guestName && reservation.guestName === "Reserved") {
       await prisma.reservation.update({
         where: { id: reservation.id },
@@ -112,7 +110,6 @@ export async function POST(req: NextRequest) {
 
     const { property } = reservation;
 
-    // Generate Claude reply using property documentation
     const aiReply = await generateGuestMessage({
       messageType: "special",
       guestMessage,
@@ -126,7 +123,6 @@ export async function POST(req: NextRequest) {
       checkoutDate: reservation.checkout,
     });
 
-    // Save to message history
     await prisma.message.create({
       data: {
         propertyId: property.id,
@@ -137,19 +133,14 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const airbnbLink = reservation.confirmationCode
-      ? buildAirbnbReservationLink(reservation.confirmationCode)
-      : null;
+    const shortName = property.shortName ?? property.name;
 
-    const whatsappMessage = buildGuestReplyMessage({
-      propertyName: property.name,
+    const whatsappMessage = buildGuestMessage({
+      propertyShortName: shortName,
       guestName: reservation.guestName,
-      checkin: reservation.checkin,
-      checkout: reservation.checkout,
       guestMessage,
       aiReply,
-      airbnbLink,
-      region: property.region,
+      threadUrl,
     });
 
     await sendWhatsAppForProperty(property, whatsappMessage);
@@ -157,7 +148,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[airbnb-email webhook] Error:", err);
-    // Always return 200 to SendGrid to avoid retries on app errors
     return NextResponse.json({ ok: false, error: String(err) });
   }
 }

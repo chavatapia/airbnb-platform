@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const PropertySchema = z.object({
   name: z.string().min(1),
+  shortName: z.string().optional().or(z.literal("")),
   address: z.string().min(1),
   region: z.enum(["MEXICO", "NORWAY"]),
   currency: z.enum(["MXN", "NOK"]),
@@ -31,13 +32,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { icalUrl, whatsappGroupId, ...rest } = parsed.data;
+  const { icalUrl, whatsappGroupId, shortName, ...rest } = parsed.data;
 
   const property = await prisma.property.create({
     data: {
       ...rest,
       icalUrl: icalUrl || null,
       whatsappGroupId: whatsappGroupId || null,
+      shortName: shortName || null,
     },
   });
 

@@ -25,6 +25,7 @@ export default async function EditPropertyPage({
         propertyId={id}
         defaults={{
           name: property.name,
+          shortName: property.shortName ?? undefined,
           address: property.address,
           region: property.region,
           currency: property.currency,

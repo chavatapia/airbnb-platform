@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 type PropertyDefaults = {
   name?: string;
+  shortName?: string;
   address?: string;
   region?: string;
   currency?: string;
@@ -64,7 +65,15 @@ export function PropertyForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="name">Nombre de la propiedad *</Label>
-              <Input id="name" name="name" placeholder="Ej: Depto Centro Guadalajara" required defaultValue={defaults?.name} />
+              <Input id="name" name="name" placeholder="Ej: Industrial & Minimalist Loft #1 with Cochera" required defaultValue={defaults?.name} />
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="shortName">Nombre corto (para notificaciones)</Label>
+              <Input id="shortName" name="shortName" placeholder="Ej: IND1, FLR2, Full House" defaultValue={defaults?.shortName} />
+              <p className="text-xs text-muted-foreground">
+                Aparece en los mensajes de WhatsApp. Si lo dejas vacío se usa el nombre completo.
+              </p>
             </div>
 
             <div className="col-span-2 space-y-2">
