@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const [properties, reservations] = await Promise.all([
       prisma.property.findMany({
         where: { active: true },
-        select: { name: true, region: true, instructions: true, amenities: true, rules: true },
+        select: { name: true, shortName: true, address: true, region: true, instructions: true, amenities: true, rules: true },
       }),
       prisma.reservation.findMany({
         where: {

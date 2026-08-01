@@ -8,6 +8,8 @@ interface HostReplyParams {
   question: string;
   properties: Array<{
     name: string;
+    shortName?: string | null;
+    address: string;
     region: string;
     instructions?: string | null;
     amenities?: string | null;
@@ -52,7 +54,8 @@ export async function generateHostReply({
 
   const propertyContext = properties
     .map((p) => {
-      const parts = [`${p.name} (${p.region})`];
+      const label = p.shortName ? `${p.shortName} — ${p.name}` : p.name;
+      const parts = [`${label} | ${p.address}`];
       if (p.instructions) parts.push(`Acceso: ${p.instructions}`);
       if (p.amenities) parts.push(`Amenidades: ${p.amenities}`);
       if (p.rules) parts.push(`Reglas: ${p.rules}`);
