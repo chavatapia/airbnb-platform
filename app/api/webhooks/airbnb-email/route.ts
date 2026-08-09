@@ -34,10 +34,29 @@ export async function POST(req: NextRequest) {
     if (RESERVATION_SUBJECT_REGEX.test(subject)) {
       const parsed = parseReservationEmail(subject, text, html);
       if (!parsed) {
+        await prisma.syncLog.create({
+          data: {
+            type: "email",
+            status: "error",
+            details: `Could not parse reservation email: "${subject}"`,
+          },
+        });
         return NextResponse.json({ ok: true, skipped: "reservation email not parseable" });
       }
 
       const result = await upsertReservationFromParsedEmail(parsed, "email");
+      await prisma.syncLog.create({
+        data: {
+          type: "email",
+          status: result.action === "error" ? "error" : "success",
+          recordCount: result.action === "created" || result.action === "updated" ? 1 : 0,
+          details:
+            result.action === "error"
+              ? result.message
+              : `${result.action}: ${parsed.confirmationCode} (${parsed.guestName})`,
+        },
+      });
+
       return NextResponse.json({
         ok: result.action !== "error",
         reservationSync: result.action,
