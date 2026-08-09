@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
 
     for (const email of emails) {
       try {
-        const { subject, plaintext, html } = extractEmailBody(email.payload);
+        const { subject, plaintext, html, date } = extractEmailBody(email.payload);
 
-        const parsed = parseAirbnbEmail(subject, plaintext, html);
+        const parsed = parseAirbnbEmail(subject, plaintext, html, date);
         if (!parsed) {
           skipped++;
           continue;

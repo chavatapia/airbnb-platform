@@ -86,17 +86,20 @@ export function extractEmailBody(payload: any): {
   subject: string;
   plaintext: string;
   html?: string;
+  date: Date;
 } {
   let subject = "";
   let plaintext = "";
   let html = "";
 
-  // Extract subject from headers
+  // Extract subject and date from headers
   const headers = payload?.headers || [];
   const subjectHeader = headers.find((h: any) => h.name === "Subject");
   if (subjectHeader) {
     subject = subjectHeader.value;
   }
+  const dateHeader = headers.find((h: any) => h.name === "Date");
+  const date = dateHeader ? new Date(dateHeader.value) : new Date();
 
   // Recursively walk MIME parts (Airbnb emails are often nested
   // multipart/alternative inside multipart/related)
@@ -122,5 +125,5 @@ export function extractEmailBody(payload: any): {
     plaintext = decodeBase64(payload.body.data);
   }
 
-  return { subject, plaintext, html };
+  return { subject, plaintext, html, date };
 }
