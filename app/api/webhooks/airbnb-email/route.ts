@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseAirbnbEmail } from "@/lib/airbnb-email";
+import { parseAirbnbEmail as parseReservationEmail } from "@/lib/gmail-parser";
+import { upsertReservationFromParsedEmail } from "@/lib/reservation-sync";
 import { generateGuestMessage } from "@/lib/claude";
 import {
   buildGuestMessage,
   sendWhatsAppForProperty,
   sendWhatsAppToMe,
 } from "@/lib/whatsapp";
+
+// Airbnb subjects for booking confirmations/cancellations, as opposed to
+// guest message notifications ("X sent you a message"). Handled separately
+// below so a confirmation email creates/updates a Reservation instead of
+// being treated as a guest inquiry.
+const RESERVATION_SUBJECT_REGEX =
+  /reservation confirmed|new (booking|reservation)|booking confirmed|reserva confirmada|nueva reserva|reservation cancell?ed|reserva cancelada/i;
 
 // SendGrid Inbound Parse sends multipart/form-data
 export async function POST(req: NextRequest) {
@@ -20,6 +29,21 @@ export async function POST(req: NextRequest) {
 
     if (!from.includes("@airbnb.com")) {
       return NextResponse.json({ ok: true, skipped: "not airbnb" });
+    }
+
+    if (RESERVATION_SUBJECT_REGEX.test(subject)) {
+      const parsed = parseReservationEmail(subject, text, html);
+      if (!parsed) {
+        return NextResponse.json({ ok: true, skipped: "reservation email not parseable" });
+      }
+
+      const result = await upsertReservationFromParsedEmail(parsed, "email");
+      return NextResponse.json({
+        ok: result.action !== "error",
+        reservationSync: result.action,
+        confirmationCode: parsed.confirmationCode,
+        error: result.message,
+      });
     }
 
     const { guestName, guestMessage, confirmationCode, threadUrl } =

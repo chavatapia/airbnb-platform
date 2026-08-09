@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
         const listing = row.Listing?.trim();
         const checkin = new Date(row.Check_in);
         const checkout = new Date(row.Check_out);
-        const moneda = row.Moneda?.trim() || "USD";
         const monto = parseFloat(row.Monto) || 0;
 
         if (!confirmationCode || !listing || !guestName) {
@@ -87,7 +86,8 @@ export async function POST(req: NextRequest) {
           if (
             existing.guestName !== guestName ||
             existing.checkin.getTime() !== checkin.getTime() ||
-            existing.checkout.getTime() !== checkout.getTime()
+            existing.checkout.getTime() !== checkout.getTime() ||
+            existing.amount?.toNumber() !== monto
           ) {
             await prisma.reservation.update({
               where: { id: existing.id },
@@ -96,7 +96,8 @@ export async function POST(req: NextRequest) {
                 checkin,
                 checkout,
                 status: "CONFIRMED",
-                currency: moneda,
+                currency: property.currency,
+                amount: monto,
                 syncedAt: new Date(),
               },
             });
@@ -114,7 +115,8 @@ export async function POST(req: NextRequest) {
               checkin,
               checkout,
               status: "CONFIRMED",
-              currency: moneda,
+              currency: property.currency,
+              amount: monto,
               source: "csv_import",
               syncedAt: new Date(),
               // Generate external ID based on confirmation code

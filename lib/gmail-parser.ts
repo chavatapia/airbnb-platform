@@ -1,12 +1,13 @@
 // Parser para extraer datos de reservaciones desde emails de Airbnb
 
+// Must match Prisma's ReservationStatus enum (see prisma/schema.prisma)
 export interface ParsedEmailReservation {
   confirmationCode: string;
   guestName: string;
   propertyName: string;
   checkin: Date;
   checkout: Date;
-  status: "CONFIRMED" | "PENDING";
+  status: "CONFIRMED" | "CANCELLED";
 }
 
 // Regex patterns para extraer datos de emails de Airbnb
@@ -65,7 +66,9 @@ export function parseAirbnbEmail(
     }
 
     // Determinar status (usualmente está en el asunto)
-    const status = subject.toLowerCase().includes("cancelled") ? "PENDING" : "CONFIRMED";
+    const status = subject.toLowerCase().includes("cancelled")
+      ? "CANCELLED"
+      : "CONFIRMED";
 
     return {
       confirmationCode,

@@ -1,42 +1,41 @@
 import { google } from "googleapis";
 import type { gmail_v1 } from "googleapis";
 
-interface GmailAuthConfig {
-  type: string;
-  project_id: string;
-  private_key_id: string;
-  private_key: string;
-  client_email: string;
-  client_id: string;
-  auth_uri: string;
-  token_uri: string;
-  auth_provider_x509_cert_url: string;
-  client_x509_cert_url: string;
-}
-
 let gmailClient: gmail_v1.Gmail | null = null;
+
+export function getOAuthClient() {
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  const redirectUri = process.env.GMAIL_REDIRECT_URI;
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error(
+      "GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REDIRECT_URI must be set"
+    );
+  }
+
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
 
 function initializeGmailClient(): gmail_v1.Gmail {
   if (gmailClient) return gmailClient;
 
-  const credentialsJson = process.env.GMAIL_SERVICE_ACCOUNT_KEY;
-  if (!credentialsJson) {
-    throw new Error("GMAIL_SERVICE_ACCOUNT_KEY environment variable not set");
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+  if (!refreshToken) {
+    throw new Error(
+      "GMAIL_REFRESH_TOKEN environment variable not set. Complete the OAuth flow at /api/auth/gmail first."
+    );
   }
 
-  const credentials: GmailAuthConfig = JSON.parse(credentialsJson);
+  const oauth2Client = getOAuthClient();
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
 
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
-  });
-
-  gmailClient = google.gmail({ version: "v1", auth });
+  gmailClient = google.gmail({ version: "v1", auth: oauth2Client });
   return gmailClient;
 }
 
 export async function getAirbnbEmails(
-  query: string = "from:noreply@airbnb.com"
+  query: string = "from:automated@airbnb.com OR from:noreply@airbnb.com"
 ): Promise<Array<{ id: string; messageId: string; payload: any }>> {
   const gmail = initializeGmailClient();
 
@@ -75,7 +74,9 @@ export async function getAirbnbEmails(
 
 export function decodeBase64(str: string): string {
   try {
-    return Buffer.from(str, "base64").toString("utf-8");
+    // Gmail uses URL-safe base64
+    const normalized = str.replace(/-/g, "+").replace(/_/g, "/");
+    return Buffer.from(normalized, "base64").toString("utf-8");
   } catch {
     return str;
   }
@@ -91,27 +92,33 @@ export function extractEmailBody(payload: any): {
   let html = "";
 
   // Extract subject from headers
-  const headers = payload.headers || [];
+  const headers = payload?.headers || [];
   const subjectHeader = headers.find((h: any) => h.name === "Subject");
   if (subjectHeader) {
     subject = subjectHeader.value;
   }
 
-  // Extract body
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      const mimeType = part.mimeType;
-      if (mimeType === "text/plain") {
-        if (part.body?.data) {
-          plaintext = decodeBase64(part.body.data);
-        }
-      } else if (mimeType === "text/html") {
-        if (part.body?.data) {
-          html = decodeBase64(part.body.data);
-        }
+  // Recursively walk MIME parts (Airbnb emails are often nested
+  // multipart/alternative inside multipart/related)
+  function walk(node: any) {
+    if (!node) return;
+
+    if (node.mimeType === "text/plain" && node.body?.data && !plaintext) {
+      plaintext = decodeBase64(node.body.data);
+    } else if (node.mimeType === "text/html" && node.body?.data && !html) {
+      html = decodeBase64(node.body.data);
+    }
+
+    if (node.parts) {
+      for (const part of node.parts) {
+        walk(part);
       }
     }
-  } else if (payload.body?.data) {
+  }
+
+  if (payload?.parts) {
+    walk(payload);
+  } else if (payload?.body?.data) {
     plaintext = decodeBase64(payload.body.data);
   }
 

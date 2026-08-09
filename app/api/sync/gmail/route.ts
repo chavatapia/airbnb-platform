@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseAirbnbEmail } from "@/lib/gmail-parser";
 import { getAirbnbEmails, extractEmailBody } from "@/lib/gmail";
+import { upsertReservationFromParsedEmail } from "@/lib/reservation-sync";
 
-// POST /api/sync/gmail
-// Import reservations from Gmail (Airbnb confirmation emails)
-// Protected by CRON_SECRET header
+// GET /api/sync/gmail
+// Import reservations from Gmail (Airbnb confirmation emails), via OAuth.
+// This is a fallback data source — the primary path is the SendGrid
+// Inbound Parse webhook at /api/webhooks/airbnb-email, which the same
+// personal Gmail account already forwards Airbnb mail to. Use this route
+// only if that forwarding setup breaks or is unavailable.
+// Protected by CRON_SECRET header. See docs/GMAIL_SETUP.md for OAuth setup.
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -16,7 +21,7 @@ export async function GET(req: NextRequest) {
   try {
     // Get Airbnb emails from Gmail
     const emails = await getAirbnbEmails(
-      "from:noreply@airbnb.com is:unread OR from:noreply@airbnb.com newer_than:30d"
+      "from:automated@airbnb.com OR from:noreply@airbnb.com newer_than:30d"
     );
 
     let imported = 0;
@@ -27,85 +32,27 @@ export async function GET(req: NextRequest) {
 
     for (const email of emails) {
       try {
-        // Extract email body
         const { subject, plaintext, html } = extractEmailBody(email.payload);
 
-        // Parse the email
         const parsed = parseAirbnbEmail(subject, plaintext, html);
         if (!parsed) {
           skipped++;
           continue;
         }
 
-        // Find property by name
-        const property = await prisma.property.findFirst({
-          where: {
-            OR: [
-              { name: { contains: parsed.propertyName } },
-              { shortName: { contains: parsed.propertyName.split(" ")[0] } },
-            ],
-          },
-        });
+        const result = await upsertReservationFromParsedEmail(parsed, "gmail");
 
-        if (!property) {
-          errors.push(`No property found for: ${parsed.propertyName}`);
-          skipped++;
-          continue;
-        }
-
-        // Try to find existing reservation by confirmation code
-        const existing = await prisma.reservation.findFirst({
-          where: {
-            confirmationCode: parsed.confirmationCode,
-            propertyId: property.id,
-          },
-        });
-
-        if (existing) {
-          // Update if data differs
-          if (
-            existing.guestName !== parsed.guestName ||
-            existing.checkin.getTime() !== parsed.checkin.getTime() ||
-            existing.checkout.getTime() !== parsed.checkout.getTime() ||
-            existing.status !== parsed.status
-          ) {
-            await prisma.reservation.update({
-              where: { id: existing.id },
-              data: {
-                guestName: parsed.guestName,
-                checkin: parsed.checkin,
-                checkout: parsed.checkout,
-                status: parsed.status,
-                syncedAt: new Date(),
-              },
-            });
-            updated++;
-            results.push(
-              `Updated: ${parsed.confirmationCode} (${parsed.guestName})`
-            );
-          } else {
-            skipped++;
-          }
-        } else {
-          // Create new reservation
-          await prisma.reservation.create({
-            data: {
-              propertyId: property.id,
-              confirmationCode: parsed.confirmationCode,
-              guestName: parsed.guestName,
-              checkin: parsed.checkin,
-              checkout: parsed.checkout,
-              status: parsed.status,
-              currency: property.currency,
-              source: "gmail",
-              syncedAt: new Date(),
-              externalId: `gmail-${parsed.confirmationCode}`,
-            },
-          });
+        if (result.action === "created") {
           imported++;
-          results.push(
-            `Created: ${parsed.confirmationCode} (${parsed.guestName})`
-          );
+          results.push(`Created: ${parsed.confirmationCode} (${parsed.guestName})`);
+        } else if (result.action === "updated") {
+          updated++;
+          results.push(`Updated: ${parsed.confirmationCode} (${parsed.guestName})`);
+        } else if (result.action === "error") {
+          errors.push(result.message ?? "Unknown error");
+          skipped++;
+        } else {
+          skipped++;
         }
       } catch (err) {
         errors.push(
@@ -114,7 +61,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Log sync results
     await prisma.syncLog.create({
       data: {
         type: "gmail",
@@ -136,7 +82,6 @@ export async function GET(req: NextRequest) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[gmail-sync] Error:", error);
 
-    // Log error
     try {
       await prisma.syncLog.create({
         data: {

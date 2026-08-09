@@ -1,14 +1,23 @@
-# Gmail Synchronization Setup
+# Gmail Synchronization Setup (Personal Gmail Account)
 
-This document explains how to set up Gmail synchronization for Airbnb reservation emails.
+## Which path applies to you
 
-## Overview
+This repo has **two ways** to turn Airbnb confirmation emails into `Reservation` rows:
 
-The Gmail sync endpoint automatically fetches Airbnb confirmation emails from your Gmail inbox and imports them into the database. This is the most reliable data source since Airbnb emails contain:
+1. **Primary: the existing SendGrid Inbound Parse webhook** (`/api/webhooks/airbnb-email`). Your personal Gmail already forwards Airbnb mail here (this is how guest-message replies via WhatsApp already work). It's been extended to also detect reservation confirmation/cancellation subjects and upsert reservations — **no new setup needed**, since the forwarding is already in place.
+2. **Fallback: the Gmail OAuth sync** (`/api/sync/gmail`), documented below. Use this only if the SendGrid forwarding breaks, or as a redundant scheduled sync. It requires creating a Google Cloud OAuth app and granting consent, which is more setup than option 1.
+
+If reservations are already showing up correctly via WhatsApp/guest messages, option 1 is doing its job and you likely don't need to set up OAuth at all. The rest of this document covers option 2.
+
+## Overview (OAuth fallback)
+
+The Gmail sync endpoint fetches Airbnb confirmation emails from your Gmail inbox via the Gmail API and imports them into the database, extracting:
 - Confirmation codes (HM-format)
 - Guest names
 - Check-in and check-out dates
 - Property information
+
+Since Airbnb sends to your **personal Gmail account**, authentication uses **OAuth 2.0 with your explicit consent** — there's no service account or domain-wide delegation involved (those only work with Google Workspace).
 
 ## Setup Steps
 
@@ -21,55 +30,57 @@ The Gmail sync endpoint automatically fetches Airbnb confirmation emails from yo
    - Search for "Gmail API"
    - Click it and press "Enable"
 
-### 2. Create a Service Account
+### 2. Configure the OAuth Consent Screen
+
+1. Go to APIs & Services → OAuth consent screen
+2. User type: **External** (unless you have Workspace)
+3. Fill in app name (e.g. "Airbnb Platform Sync"), your email as support contact
+4. Scopes: add `https://www.googleapis.com/auth/gmail.readonly`
+5. Test users: add your own Gmail address (required while the app is "Testing" — it won't be publicly reviewed)
+
+### 3. Create an OAuth 2.0 Client ID
 
 1. Go to APIs & Services → Credentials
-2. Click "Create Credentials" → "Service Account"
-3. Fill in the service account details:
-   - Name: `airbnb-sync`
-   - Description: "Airbnb reservation email parser"
-4. Click "Create and Continue"
-5. Grant the service account access (you can skip this for now)
-6. Click "Done"
+2. Click "Create Credentials" → "OAuth client ID"
+3. Application type: **Web application**
+4. Name: `airbnb-platform`
+5. Authorized redirect URIs, add both:
+   - `http://localhost:3000/api/auth/gmail/callback` (for local dev)
+   - `https://YOUR_PRODUCTION_DOMAIN/api/auth/gmail/callback` (for production)
+6. Click "Create" — copy the **Client ID** and **Client Secret**
 
-### 3. Generate Service Account Key
+### 4. Configure Environment Variables
 
-1. Click on the service account you just created
-2. Go to the "Keys" tab
-3. Click "Add Key" → "Create new key"
-4. Choose **JSON** format
-5. Click "Create"
-6. This will download a JSON file with your credentials
-
-### 4. Share Your Gmail with the Service Account
-
-The service account needs access to your Gmail. You have two options:
-
-**Option A: Share your email directly (Recommended for testing)**
-1. Copy the `client_email` from your downloaded JSON file (format: `xxx@xxx.iam.gserviceaccount.com`)
-2. Forward your Gmail inbox permissions to this service account
-3. This is not possible through Gmail UI directly—you'll need to:
-   - Create a shared mailbox in Google Workspace, OR
-   - Use Gmail delegation (if using Google Workspace)
-
-**Option B: Use Gmail API with OAuth (Better for production)**
-1. Set up OAuth 2.0 consent screen
-2. Create OAuth credentials (Desktop application)
-3. Implement OAuth flow in the app
-
-For now, we'll use **domain-wide delegation** if you have Google Workspace.
-
-### 5. Configure Environment Variables
-
-1. Take the JSON file you downloaded
-2. Convert it to a single-line string (remove newlines)
-3. Add to your `.env.local`:
+Add to `.env.local` (and your production environment):
 
 ```bash
-GMAIL_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"...","token_uri":"...","auth_provider_x509_cert_url":"...","client_x509_cert_url":"..."}'
+GMAIL_CLIENT_ID="XXXXXXXXXX.apps.googleusercontent.com"
+GMAIL_CLIENT_SECRET="XXXXXXXXXXXXXXXXXXXXXXXX"
+GMAIL_REDIRECT_URI="http://localhost:3000/api/auth/gmail/callback"
 ```
 
-**Important:** Keep the `\n` in the private_key as literal characters (not actual newlines).
+Leave `GMAIL_REFRESH_TOKEN` unset for now — you'll get it in the next step.
+
+### 5. Grant Consent and Get a Refresh Token
+
+1. Start (or redeploy) the app with the variables above set
+2. In your browser, while logged into the **Gmail account that receives Airbnb emails**, visit:
+
+   ```
+   http://localhost:3000/api/auth/gmail?secret=YOUR_CRON_SECRET
+   ```
+
+3. You'll be redirected to Google's consent screen — approve read-only Gmail access
+4. Google redirects back to `/api/auth/gmail/callback`, which displays a **refresh token**
+5. Copy that value into `.env.local`:
+
+   ```bash
+   GMAIL_REFRESH_TOKEN="1//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+   ```
+
+6. Restart the app so it picks up the new variable
+
+**Important:** Google only shows the refresh token the first time you grant consent for a given app. If you lose it, revoke access at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) and repeat step 5 — the `prompt=consent` flag forces a new refresh token to be issued.
 
 ### 6. Test the Sync
 
@@ -96,30 +107,36 @@ Expected response:
 
 ## Troubleshooting
 
-### Error: "GMAIL_SERVICE_ACCOUNT_KEY environment variable not set"
+### Error: "GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REDIRECT_URI must be set"
 
-**Solution:** Make sure you've added the environment variable to `.env.local` and restarted the dev server.
+**Solution:** Make sure all three are in `.env.local` and the dev server was restarted.
 
-### Error: "Invalid credentials"
+### Error: "GMAIL_REFRESH_TOKEN environment variable not set"
 
-**Solution:**
-1. Double-check that the JSON key is valid (no missing quotes, proper escaping)
-2. Make sure the Gmail API is enabled in Google Cloud Console
-3. Verify the service account has access to read Gmail
+**Solution:** Complete step 5 (the consent flow) — this token can only be obtained by visiting `/api/auth/gmail` in a browser.
+
+### Error: "No refresh token returned"
+
+**Cause:** You already granted consent before, so Google skipped issuing a new refresh token.
+**Solution:** Revoke access at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) for the app, then visit `/api/auth/gmail?secret=...` again.
+
+### Error: "invalid_grant" when syncing
+
+**Cause:** The refresh token was revoked or expired (this can happen if the OAuth consent screen is still in "Testing" mode — Google expires test tokens after 7 days).
+**Solution:** Either publish the OAuth consent screen (moves it out of testing) or repeat the consent flow periodically. For long-term production use, publishing the app (even without full verification, since you're the only user) avoids the 7-day expiry.
 
 ### No emails found
 
 **Possible causes:**
-1. The service account doesn't have access to your Gmail inbox
-2. There are no Airbnb emails with the search query
-3. All emails have been marked as read
+1. The search query doesn't match how Airbnb emails look in your inbox
+2. All matching emails are older than expected, or already read (if using `is:unread`)
 
-**Solution:** Try adjusting the search query in `getAirbnbEmails()` to include older emails or read messages.
+**Solution:** Adjust the query passed to `getAirbnbEmails()` in `app/api/sync/gmail/route.ts` — e.g. remove `is:unread`, or change the sender filter to match what actually shows in your inbox (check the "from" address on a real Airbnb confirmation email).
 
 ## How It Works
 
-1. The sync endpoint is called every 30 minutes by Vercel Cron (you can configure this)
-2. It fetches unread Airbnb emails from the last 30 days
+1. The sync endpoint is called every 30 minutes by Vercel Cron (configure this in `vercel.json`)
+2. It fetches Airbnb emails from the last 30 days using the Gmail API (via your OAuth refresh token)
 3. For each email, it:
    - Extracts the confirmation code, guest name, and dates
    - Finds the matching property in the database
@@ -137,7 +154,7 @@ The email parser (`lib/gmail-parser.ts`) can extract:
 - **Status:** CONFIRMED or PENDING based on email content
 
 It supports:
-- HTML and plain-text emails
+- HTML and plain-text emails (including nested multipart MIME structures)
 - English and Spanish date formats
 - Multiple email patterns from Airbnb
 
