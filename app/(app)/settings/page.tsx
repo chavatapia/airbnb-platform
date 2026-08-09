@@ -15,11 +15,17 @@ export default async function SettingsPage() {
   });
 
   const syncLogs = await prisma.syncLog.findMany({
-    where: { type: "ical" },
     include: { property: { select: { name: true } } },
     orderBy: { syncedAt: "desc" },
     take: 20,
   });
+
+  const SYNC_TYPE_LABELS: Record<string, string> = {
+    ical: "iCal",
+    email: "Email",
+    gmail: "Gmail",
+    csv: "CSV",
+  };
 
   const ROLE_LABELS: Record<string, string> = {
     ADMIN: "Admin",
@@ -89,12 +95,13 @@ export default async function SettingsPage() {
       {/* Sync Log */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">iCal Sync Log</CardTitle>
+          <CardTitle className="text-base">Sync Log</CardTitle>
         </CardHeader>
         <CardContent>
           {syncLogs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No hay sincronizaciones registradas. El cron corre cada 30 min.
+              No hay sincronizaciones registradas. El cron de iCal corre cada 30 min,
+              y el webhook de email se dispara cuando llega una reservacion nueva.
             </p>
           ) : (
             <div className="space-y-1 text-xs">
@@ -115,6 +122,9 @@ export default async function SettingsPage() {
                           : "bg-yellow-500"
                       }`}
                     />
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {SYNC_TYPE_LABELS[log.type] ?? log.type}
+                    </Badge>
                     <span className="text-gray-700">
                       {log.property?.name ?? "—"}
                     </span>

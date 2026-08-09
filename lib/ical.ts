@@ -36,6 +36,9 @@ export async function parseIcalUrl(
     const uid = event.uid ?? key;
     const summary = (event.summary as string) ?? "";
     const description = (event.description as string) ?? "";
+    // Include location and URL fields if present (Airbnb may put data there)
+    const location = (event.location as string) ?? "";
+    const url = (event.url as string) ?? "";
 
     // Determine if this is a real booking or just a blocked date
     const isBlocked =
@@ -43,22 +46,42 @@ export async function parseIcalUrl(
       summary.toLowerCase().includes("blocked") ||
       summary.toLowerCase().includes("airbnb (not available)");
 
-    // Try to extract confirmation code from UID or description
+    // Try to extract confirmation code from multiple sources
+    // Check: UID (most reliable), description, summary, location, URL
     let confirmationCode: string | null = null;
-    const codeMatch =
-      uid.match(CONFIRMATION_CODE_REGEX) ||
-      description.match(CONFIRMATION_CODE_REGEX) ||
-      summary.match(CONFIRMATION_CODE_REGEX);
-    if (codeMatch) {
-      confirmationCode = codeMatch[1].toUpperCase();
+
+    // UID often contains the confirmation code directly (format: something@airbnb.com or similar)
+    // But also check for the code in the actual text fields
+    const fieldsToCheck = [uid, description, summary, location, url];
+
+    for (const field of fieldsToCheck) {
+      const codeMatch = field.match(CONFIRMATION_CODE_REGEX);
+      if (codeMatch) {
+        confirmationCode = codeMatch[1].toUpperCase();
+        break;
+      }
     }
 
-    // Try to extract guest name from summary (Airbnb format: "Guest Name (HMXXXXXX)")
+    // If confirmation code not found and it's not blocked, use UID as fallback
+    // (sometimes Airbnb uses the booking ref as UID)
+    if (!confirmationCode && !isBlocked) {
+      const uidCode = uid.match(/([A-Z0-9]{8,12})/);
+      if (uidCode) {
+        confirmationCode = uidCode[1];
+      }
+    }
+
+    // Try to extract guest name from summary (Airbnb format: "Guest Name" or "Guest Name (HMXXXXXX)")
     let guestName: string | null = null;
     if (!isBlocked && summary) {
-      const nameMatch = summary.match(/^(.+?)\s*(?:\(HM[A-Z0-9]+\))?$/i);
-      if (nameMatch && !summary.toLowerCase().startsWith("airbnb")) {
-        guestName = nameMatch[1].trim();
+      // Remove confirmation code and parentheses from summary to get guest name
+      const cleanedSummary = summary
+        .replace(/\s*\(HM[A-Z0-9]+\)\s*/gi, "")
+        .replace(/airbnb\s*/gi, "")
+        .trim();
+
+      if (cleanedSummary && !cleanedSummary.toLowerCase().startsWith("not available")) {
+        guestName = cleanedSummary;
       }
     }
 

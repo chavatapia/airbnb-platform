@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     const thirtyDaysAhead = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const [properties, reservations] = await Promise.all([
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       prisma.reservation.findMany({
         where: {
           status: "CONFIRMED",
-          checkout: { gte: sevenDaysAgo },
+          checkout: { gte: ninetyDaysAgo },
           checkin: { lte: thirtyDaysAhead },
         },
         include: { property: { select: { name: true } } },
